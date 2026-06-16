@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mow Schedule</title>
+<style>
+  :root {
+    --bg: #0f1410;
+    --panel: #161d17;
+    --line: #2a342b;
+    --green: #5fae6b;
+    --green-dim: #3b5c41;
+    --amber: #d9a440;
+    --red: #c1564a;
+    --text: #e7ece6;
+    --text-dim: #8aa089;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Courier New', monospace;
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 {
+    font-size: 1.4rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 2px solid var(--green);
+    padding-bottom: 10px;
+    margin: 0 0 4px 0;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    margin-bottom: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--green-dim);
+    border-radius: 4px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    transition: border-color 0.2s;
+  }
+  .card.due { border-left-color: var(--red); }
+  .card.soon { border-left-color: var(--amber); }
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .name {
+    font-size: 1.05rem;
+    font-weight: bold;
+    letter-spacing: 0.02em;
+  }
+  .price {
+    color: var(--green);
+    font-weight: bold;
+    white-space: nowrap;
+  }
+  .meta {
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    margin-top: 4px;
+  }
+  .status {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    letter-spacing: 0.04em;
+  }
+  .status.due { color: var(--red); }
+  .status.soon { color: var(--amber); }
+  .status.ok { color: var(--green); }
+  .controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  button {
+    font-family: inherit;
+    font-size: 0.8rem;
+    background: var(--green-dim);
+    color: var(--text);
+    border: 1px solid var(--green);
+    border-radius: 4px;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+  button:active { transform: scale(0.97); }
+  button.secondary {
+    background: transparent;
+    border-color: var(--line);
+    color: var(--text-dim);
+  }
+  .cycle-input {
+    width: 50px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: inherit;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 0.8rem;
+  }
+  .filter-bar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .filter-bar button {
+    background: transparent;
+    border-color: var(--line);
+    color: var(--text-dim);
+  }
+  .filter-bar button.active {
+    background: var(--green-dim);
+    border-color: var(--green);
+    color: var(--text);
+  }
+  .empty {
+    color: var(--text-dim);
+    text-align: center;
+    padding: 30px 10px;
+    font-size: 0.85rem;
+  }
+  .loading { text-align: center; color: var(--text-dim); padding: 30px; }
+</style>
+</head>
+<body>
+
+<h1>Mow Schedule</h1>
+<div class="subtitle" id="subtitle">loading...</div>
+
+<div class="filter-bar">
+  <button id="filter-all" class="active">All</button>
+  <button id="filter-due">Due / Overdue</button>
+  <button id="filter-soon">Coming up</button>
+</div>
+
+<button id="add-lawn-btn" style="width:100%; margin-bottom:14px; padding:10px;">+ Add Lawn</button>
+
+<div id="add-form" style="display:none; background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:14px; margin-bottom:14px;">
+  <input type="text" id="new-name" placeholder="Name / Address" style="width:100%; margin-bottom:8px; background:var(--bg); border:1px solid var(--line); color:var(--text); font-family:inherit; padding:8px; border-radius:4px;">
+  <div style="display:flex; gap:8px; margin-bottom:8px;">
+    <input type="number" id="new-price" placeholder="Price $" style="flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); font-family:inherit; padding:8px; border-radius:4px;">
+    <input type="number" id="new-cycle" placeholder="Cycle (days)" value="8" style="flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); font-family:inherit; padding:8px; border-radius:4px;">
+  </div>
+  <input type="date" id="new-lastmow" style="width:100%; margin-bottom:10px; background:var(--bg); border:1px solid var(--line); color:var(--text); font-family:inherit; padding:8px; border-radius:4px;">
+  <div style="display:flex; gap:8px;">
+    <button id="save-new-lawn">Save</button>
+    <button class="secondary" id="cancel-new-lawn">Cancel</button>
+  </div>
+</div>
+
+<div id="list" class="loading">Loading lawns...</div>
+
+<script>
+const STORAGE_KEY = 'lawns';
+const DEFAULT_CYCLE = 8;
+
+// Seed data extracted from notes
+const seedLawns = [
+  { id: 'eamons', name: 'Eamons', address: '', price: 55, lastMow: '2026-06-06', cycle: 8 },
+  { id: 'bill', name: 'Bill Cullen', address: 'New York Ave', price: 50, lastMow: '2026-05-27', cycle: 8 },
+  { id: 'vicki', name: 'Vicki Smith', address: '1218 West St.', price: 100, lastMow: '2026-06-13', cycle: 8 },
+  { id: 'alex', name: 'Alex', address: '10 Cardinal', price: 60, lastMow: '2026-06-01', cycle: 8 },
+  { id: 'lenox', name: 'Lenox - Finna', address: '39 East St.', price: 70, lastMow: '2026-06-06', cycle: 8 },
+  { id: 'crane', name: 'Crane Ave Louie', address: '', price: 80, lastMow: '2026-06-08', cycle: 8 },
+  { id: 'kitteredge', name: 'Kitteredge Norm', address: '', price: 50, lastMow: '2026-06-08', cycle: 8 },
+  { id: 'samuel', name: "Norm's Neighbor / Samuel", address: '', price: 60, lastMow: '2026-06-08', cycle: 8 },
+  { id: 'rick', name: 'Rick', address: '', price: 60, lastMow: '2026-06-08', cycle: 8 },
+  { id: 'kearney', name: '32 Kearney Drive', address: '', price: 70, lastMow: '2026-06-11', cycle: 8 },
+  { id: 'nancy', name: 'Nancy', address: '3 Grove St.', price: 0, lastMow: '2026-06-16', cycle: 8 },
+];
+
+let lawns = [];
+let currentFilter = 'all';
+
+function todayStr() {
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+
+function daysBetween(dateStr) {
+  const today = new Date(todayStr() + 'T00:00:00');
+  const then = new Date(dateStr + 'T00:00:00');
+  return Math.round((today - then) / 86400000);
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function nextDueDate(lawn) {
+  const d = new Date(lawn.lastMow + 'T00:00:00');
+  d.setDate(d.getDate() + lawn.cycle);
+  return d.toISOString().slice(0,10);
+}
+
+function loadLawns() {
+  let loaded = null;
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) loaded = JSON.parse(raw);
+  } catch (e) {
+    console.error('localStorage read failed:', e);
+  }
+
+  // Only fall back to seed if nothing saved at all
+  lawns = loaded || seedLawns;
+
+  // Make sure Nancy is present even in previously-saved data
+  if (!lawns.find(l => l.id === 'nancy')) {
+    lawns.push({ id: 'nancy', name: 'Nancy', address: '3 Grove St.', price: 0, lastMow: todayStr(), cycle: 8 });
+  }
+
+  saveLawns();
+  render();
+}
+
+function saveLawns() {
+  const data = JSON.stringify(lawns);
+  try {
+    localStorage.setItem(STORAGE_KEY, data);
+    showSaveSuccess();
+  } catch (e) {
+    console.error('localStorage write failed:', e);
+    showSaveError();
+  }
+}
+
+function showSaveError() {
+  flashActive = true;
+  const subtitle = document.getElementById('subtitle');
+  subtitle.textContent = '⚠ Save failed — changes may not persist. Try again.';
+  subtitle.style.color = 'var(--red)';
+  setTimeout(() => { flashActive = false; }, 2000);
+}
+
+function showSaveSuccess() {
+  flashActive = true;
+  const subtitle = document.getElementById('subtitle');
+  subtitle.textContent = '✓ Saved';
+  subtitle.style.color = 'var(--green)';
+  setTimeout(() => {
+    flashActive = false;
+    render();
+  }, 900);
+}
+
+async function markMowed(id) {
+  const lawn = lawns.find(l => l.id === id);
+  if (!lawn) return;
+  lawn.lastMow = todayStr();
+  await saveLawns();
+  render();
+}
+
+async function deleteLawn(id) {
+  lawns = lawns.filter(l => l.id !== id);
+  await saveLawns();
+  render();
+}
+
+async function updateCycle(id, value) {
+  const lawn = lawns.find(l => l.id === id);
+  if (!lawn) return;
+  const trimmed = String(value).trim();
+  if (trimmed === '') {
+    lawn.cycle = DEFAULT_CYCLE;
+  } else {
+    const n = parseInt(trimmed, 10);
+    if (!isNaN(n) && n >= 1) {
+      lawn.cycle = n;
+    }
+    // if invalid (not a number), leave the existing cycle untouched
+  }
+  await saveLawns();
+}
+
+function getStatus(lawn) {
+  const due = nextDueDate(lawn);
+  const daysUntil = daysBetween(due) * -1; // positive = days remaining
+  if (daysUntil < 0) {
+    return { cls: 'due', label: `OVERDUE by ${Math.abs(daysUntil)} day${Math.abs(daysUntil)===1?'':'s'}`, due };
+  } else if (daysUntil === 0) {
+    return { cls: 'due', label: 'DUE TODAY', due };
+  } else if (daysUntil <= 2) {
+    return { cls: 'soon', label: `Due in ${daysUntil} day${daysUntil===1?'':'s'}`, due };
+  } else {
+    return { cls: 'ok', label: `Due in ${daysUntil} days`, due };
+  }
+}
+
+let flashActive = false;
+
+function render() {
+  const list = document.getElementById('list');
+  const subtitle = document.getElementById('subtitle');
+
+  const sorted = [...lawns].sort((a,b) => nextDueDate(a).localeCompare(nextDueDate(b)));
+
+  const dueCount = sorted.filter(l => {
+    const s = getStatus(l);
+    return s.cls === 'due';
+  }).length;
+
+  if (!flashActive) {
+    subtitle.textContent = `${lawns.length} lawns · ${dueCount} need mowing now · ${todayStr()}`;
+    subtitle.style.color = '';
+  }
+
+  let filtered = sorted;
+  if (currentFilter === 'due') {
+    filtered = sorted.filter(l => getStatus(l).cls === 'due');
+  } else if (currentFilter === 'soon') {
+    filtered = sorted.filter(l => getStatus(l).cls === 'soon');
+  }
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty">Nothing here. All caught up.</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  filtered.forEach(lawn => {
+    const status = getStatus(lawn);
+    const card = document.createElement('div');
+    card.className = `card ${status.cls === 'due' ? 'due' : status.cls === 'soon' ? 'soon' : ''}`;
+
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="name">${lawn.name}${lawn.address ? ' — ' + lawn.address : ''}</div>
+        <div class="price">$${lawn.price}</div>
+      </div>
+      <div class="meta">Last mowed ${formatDate(lawn.lastMow)} · Next: ${formatDate(status.due)} · every <input type="number" class="cycle-input" min="1" value="${lawn.cycle}" data-id="${lawn.id}"> days</div>
+      <div class="status ${status.cls}">${status.label}</div>
+      <div class="controls">
+        <button data-action="mow" data-id="${lawn.id}">Mowed today</button>
+        <button class="secondary" data-action="delete" data-id="${lawn.id}" data-name="${lawn.name}">Remove</button>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+
+  list.querySelectorAll('button[data-action="mow"]').forEach(btn => {
+    btn.addEventListener('click', () => markMowed(btn.dataset.id));
+  });
+  list.querySelectorAll('button[data-action="delete"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (confirm(`Remove ${btn.dataset.name} from the list?`)) {
+        deleteLawn(btn.dataset.id);
+      }
+    });
+  });
+  list.querySelectorAll('.cycle-input').forEach(input => {
+    input.addEventListener('blur', () => {
+      updateCycle(input.dataset.id, input.value).then(render);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        input.blur();
+      }
+    });
+  });
+}
+
+document.getElementById('filter-all').addEventListener('click', (e) => {
+  currentFilter = 'all';
+  document.querySelectorAll('.filter-bar button').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  render();
+});
+document.getElementById('filter-due').addEventListener('click', (e) => {
+  currentFilter = 'due';
+  document.querySelectorAll('.filter-bar button').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  render();
+});
+document.getElementById('filter-soon').addEventListener('click', (e) => {
+  currentFilter = 'soon';
+  document.querySelectorAll('.filter-bar button').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  render();
+});
+
+document.getElementById('add-lawn-btn').addEventListener('click', () => {
+  const form = document.getElementById('add-form');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  document.getElementById('new-lastmow').value = todayStr();
+});
+
+document.getElementById('cancel-new-lawn').addEventListener('click', () => {
+  document.getElementById('add-form').style.display = 'none';
+  document.getElementById('new-name').value = '';
+  document.getElementById('new-price').value = '';
+  document.getElementById('new-cycle').value = '8';
+});
+
+document.getElementById('save-new-lawn').addEventListener('click', async () => {
+  const name = document.getElementById('new-name').value.trim();
+  const price = parseFloat(document.getElementById('new-price').value) || 0;
+  const cycle = parseInt(document.getElementById('new-cycle').value, 10) || DEFAULT_CYCLE;
+  const lastMow = document.getElementById('new-lastmow').value || todayStr();
+
+  if (!name) {
+    alert('Please enter a name or address.');
+    return;
+  }
+
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now();
+  lawns.push({ id, name, address: '', price, lastMow, cycle });
+  await saveLawns();
+
+  document.getElementById('add-form').style.display = 'none';
+  document.getElementById('new-name').value = '';
+  document.getElementById('new-price').value = '';
+  document.getElementById('new-cycle').value = '8';
+
+  render();
+});
+
+loadLawns();
+</script>
+
+</body>
+</html>
