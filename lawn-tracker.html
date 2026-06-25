@@ -206,7 +206,7 @@
 <script>
 const STORAGE_KEY = 'lawns';
 const VERSION_KEY = 'lawns_version';
-const DATA_VERSION = 2;
+const DATA_VERSION = 3; // v3 adds Alex/Lenox history + Egermont Ave
 const DEFAULT_CYCLE = 8;
 
 const seedLawns = [
@@ -216,9 +216,11 @@ const seedLawns = [
     mowHistory: ['2026-05-15','2026-05-27','2026-06-15'] },
   { id: 'vicki',      name: 'Vicki Smith',              address: '1218 West St.', price: 100, lastMow: '2026-06-13', cycle: 8,
     mowHistory: ['2026-05-17','2026-05-27','2026-06-13'] },
-  { id: 'alex',       name: 'Alex',                     address: '10 Cardinal',   price: 60,  lastMow: '2026-06-01', cycle: 8,
-    mowHistory: ['2026-06-01'] },
-  { id: 'lenox',      name: 'Lenox - Finna',            address: '39 East St.',   price: 70,  lastMow: '2026-06-06', cycle: 8,
+  { id: 'alex',       name: 'Alex',                     address: '10 Cardinal',   price: 60,  lastMow: '2026-06-19', cycle: 8,
+    mowHistory: ['2026-05-26','2026-06-01','2026-06-12','2026-06-19'] },
+  { id: 'lenox',      name: 'Lenox - Finna',            address: '39 East St.',   price: 70,  lastMow: '2026-06-24', cycle: 8,
+    mowHistory: ['2026-05-10','2026-05-19','2026-05-27','2026-06-06','2026-06-16','2026-06-24'] },
+  { id: 'egermont',   name: '17 Egermont Ave',          address: '',              price: 0,   lastMow: '2026-06-06', cycle: 8,
     mowHistory: ['2026-06-06'] },
   { id: 'crane',      name: 'Crane Ave Louie',          address: '',              price: 80,  lastMow: '2026-06-17', cycle: 8,
     mowHistory: ['2026-05-08','2026-05-16','2026-05-23','2026-05-31','2026-06-08','2026-06-17'] },
@@ -293,10 +295,17 @@ function loadLawns() {
     lawns = loaded.map(migrateLawn);
     if (loadedVersion < DATA_VERSION) {
       lawns = lawns.map(mergeHistoryFromSeed);
+      // Add any new lawns from seed not yet in saved data
+      seedLawns.forEach(seed => {
+        if (!lawns.find(l => l.id === seed.id)) {
+          lawns.push(migrateLawn(Object.assign({}, seed)));
+        }
+      });
       try { localStorage.setItem(VERSION_KEY, String(DATA_VERSION)); } catch(e) {}
     }
   }
 
+  // Legacy safety check for nancy
   if (!lawns.find(l => l.id === 'nancy')) {
     lawns.push(migrateLawn({ id: 'nancy', name: 'Nancy', address: '3 Grove St.', price: 0, lastMow: todayStr(), cycle: 8 }));
   }
