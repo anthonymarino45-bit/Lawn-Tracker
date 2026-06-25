@@ -134,6 +134,49 @@
     font-size: 0.85rem;
   }
   .loading { text-align: center; color: var(--text-dim); padding: 30px; }
+
+  /* History section */
+  .history-section {
+    margin-top: 10px;
+    border-top: 1px solid var(--line);
+    padding-top: 8px;
+  }
+  .history-list {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+  .history-entry {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    padding: 2px 0;
+  }
+  .history-entry .h-date { color: var(--text); }
+  .history-entry .h-ago { color: var(--text-dim); font-size: 0.72rem; }
+  .history-badge {
+    display: inline-block;
+    background: var(--green-dim);
+    color: var(--green);
+    border-radius: 3px;
+    font-size: 0.72rem;
+    padding: 1px 5px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .btn-history {
+    background: transparent;
+    border-color: var(--line);
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    padding: 4px 8px;
+  }
+  .btn-history:hover { border-color: var(--green); color: var(--text); }
 </style>
 </head>
 <body>
@@ -168,32 +211,33 @@
 const STORAGE_KEY = 'lawns';
 const DEFAULT_CYCLE = 8;
 
-// Seed data extracted from notes
+// Seed data
 const seedLawns = [
-  { id: 'eamons', name: 'Eamons', address: '', price: 55, lastMow: '2026-06-06', cycle: 8 },
-  { id: 'bill', name: 'Bill Cullen', address: 'New York Ave', price: 50, lastMow: '2026-05-27', cycle: 8 },
-  { id: 'vicki', name: 'Vicki Smith', address: '1218 West St.', price: 100, lastMow: '2026-06-13', cycle: 8 },
-  { id: 'alex', name: 'Alex', address: '10 Cardinal', price: 60, lastMow: '2026-06-01', cycle: 8 },
-  { id: 'lenox', name: 'Lenox - Finna', address: '39 East St.', price: 70, lastMow: '2026-06-06', cycle: 8 },
-  { id: 'crane', name: 'Crane Ave Louie', address: '', price: 80, lastMow: '2026-06-08', cycle: 8 },
-  { id: 'kitteredge', name: 'Kitteredge Norm', address: '', price: 50, lastMow: '2026-06-08', cycle: 8 },
-  { id: 'samuel', name: "Norm's Neighbor / Samuel", address: '', price: 60, lastMow: '2026-06-08', cycle: 8 },
-  { id: 'rick', name: 'Rick', address: '', price: 60, lastMow: '2026-06-08', cycle: 8 },
-  { id: 'kearney', name: '32 Kearney Drive', address: '', price: 70, lastMow: '2026-06-11', cycle: 8 },
-  { id: 'nancy', name: 'Nancy', address: '3 Grove St.', price: 0, lastMow: '2026-06-16', cycle: 8 },
+  { id: 'eamons',     name: 'Eamons',                   address: '',              price: 55,  lastMow: '2026-06-06', cycle: 8 },
+  { id: 'bill',       name: 'Bill Cullen',               address: 'New York Ave',  price: 50,  lastMow: '2026-05-27', cycle: 8 },
+  { id: 'vicki',      name: 'Vicki Smith',               address: '1218 West St.', price: 100, lastMow: '2026-06-13', cycle: 8 },
+  { id: 'alex',       name: 'Alex',                      address: '10 Cardinal',   price: 60,  lastMow: '2026-06-01', cycle: 8 },
+  { id: 'lenox',      name: 'Lenox - Finna',             address: '39 East St.',   price: 70,  lastMow: '2026-06-06', cycle: 8 },
+  { id: 'crane',      name: 'Crane Ave Louie',           address: '',              price: 80,  lastMow: '2026-06-08', cycle: 8 },
+  { id: 'kitteredge', name: 'Kitteredge Norm',           address: '',              price: 50,  lastMow: '2026-06-08', cycle: 8 },
+  { id: 'samuel',     name: "Norm's Neighbor / Samuel",  address: '',              price: 60,  lastMow: '2026-06-08', cycle: 8 },
+  { id: 'rick',       name: 'Rick',                      address: '',              price: 60,  lastMow: '2026-06-08', cycle: 8 },
+  { id: 'kearney',    name: '32 Kearney Drive',          address: '',              price: 70,  lastMow: '2026-06-11', cycle: 8 },
+  { id: 'nancy',      name: 'Nancy',                     address: '3 Grove St.',   price: 0,   lastMow: '2026-06-16', cycle: 8 },
 ];
 
 let lawns = [];
 let currentFilter = 'all';
+// Track which cards have history open
+const historyOpen = new Set();
 
 function todayStr() {
-  const d = new Date();
-  return d.toISOString().slice(0,10);
+  return new Date().toISOString().slice(0,10);
 }
 
 function daysBetween(dateStr) {
   const today = new Date(todayStr() + 'T00:00:00');
-  const then = new Date(dateStr + 'T00:00:00');
+  const then  = new Date(dateStr   + 'T00:00:00');
   return Math.round((today - then) / 86400000);
 }
 
@@ -202,15 +246,33 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function formatDateFull(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function nextDueDate(lawn) {
   const d = new Date(lawn.lastMow + 'T00:00:00');
   d.setDate(d.getDate() + lawn.cycle);
   return d.toISOString().slice(0,10);
 }
 
+// Ensure each lawn has a mowHistory array and it's in sync with lastMow
+function migrateLawn(lawn) {
+  if (!lawn.mowHistory) {
+    lawn.mowHistory = [lawn.lastMow];
+  }
+  // Make sure lastMow is in history (could have been set without history support)
+  if (!lawn.mowHistory.includes(lawn.lastMow)) {
+    lawn.mowHistory.push(lawn.lastMow);
+  }
+  // Sort oldest → newest
+  lawn.mowHistory.sort();
+  return lawn;
+}
+
 function loadLawns() {
   let loaded = null;
-
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) loaded = JSON.parse(raw);
@@ -218,12 +280,11 @@ function loadLawns() {
     console.error('localStorage read failed:', e);
   }
 
-  // Only fall back to seed if nothing saved at all
-  lawns = loaded || seedLawns;
+  lawns = (loaded || seedLawns).map(migrateLawn);
 
   // Make sure Nancy is present even in previously-saved data
   if (!lawns.find(l => l.id === 'nancy')) {
-    lawns.push({ id: 'nancy', name: 'Nancy', address: '3 Grove St.', price: 0, lastMow: todayStr(), cycle: 8 });
+    lawns.push(migrateLawn({ id: 'nancy', name: 'Nancy', address: '3 Grove St.', price: 0, lastMow: todayStr(), cycle: 8 }));
   }
 
   saveLawns();
@@ -231,9 +292,8 @@ function loadLawns() {
 }
 
 function saveLawns() {
-  const data = JSON.stringify(lawns);
   try {
-    localStorage.setItem(STORAGE_KEY, data);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(lawns));
     showSaveSuccess();
   } catch (e) {
     console.error('localStorage write failed:', e);
@@ -254,27 +314,31 @@ function showSaveSuccess() {
   const subtitle = document.getElementById('subtitle');
   subtitle.textContent = '✓ Saved';
   subtitle.style.color = 'var(--green)';
-  setTimeout(() => {
-    flashActive = false;
-    render();
-  }, 900);
+  setTimeout(() => { flashActive = false; render(); }, 900);
 }
 
-async function markMowed(id) {
+function markMowed(id) {
   const lawn = lawns.find(l => l.id === id);
   if (!lawn) return;
-  lawn.lastMow = todayStr();
-  await saveLawns();
+  const today = todayStr();
+  lawn.lastMow = today;
+  // Add to history only if not already recorded today
+  if (!lawn.mowHistory.includes(today)) {
+    lawn.mowHistory.push(today);
+    lawn.mowHistory.sort();
+  }
+  saveLawns();
   render();
 }
 
-async function deleteLawn(id) {
+function deleteLawn(id) {
   lawns = lawns.filter(l => l.id !== id);
-  await saveLawns();
+  historyOpen.delete(id);
+  saveLawns();
   render();
 }
 
-async function updateCycle(id, value) {
+function updateCycle(id, value) {
   const lawn = lawns.find(l => l.id === id);
   if (!lawn) return;
   const trimmed = String(value).trim();
@@ -282,17 +346,14 @@ async function updateCycle(id, value) {
     lawn.cycle = DEFAULT_CYCLE;
   } else {
     const n = parseInt(trimmed, 10);
-    if (!isNaN(n) && n >= 1) {
-      lawn.cycle = n;
-    }
-    // if invalid (not a number), leave the existing cycle untouched
+    if (!isNaN(n) && n >= 1) lawn.cycle = n;
   }
-  await saveLawns();
+  saveLawns();
 }
 
 function getStatus(lawn) {
   const due = nextDueDate(lawn);
-  const daysUntil = daysBetween(due) * -1; // positive = days remaining
+  const daysUntil = daysBetween(due) * -1;
   if (daysUntil < 0) {
     return { cls: 'due', label: `OVERDUE by ${Math.abs(daysUntil)} day${Math.abs(daysUntil)===1?'':'s'}`, due };
   } else if (daysUntil === 0) {
@@ -311,11 +372,7 @@ function render() {
   const subtitle = document.getElementById('subtitle');
 
   const sorted = [...lawns].sort((a,b) => nextDueDate(a).localeCompare(nextDueDate(b)));
-
-  const dueCount = sorted.filter(l => {
-    const s = getStatus(l);
-    return s.cls === 'due';
-  }).length;
+  const dueCount = sorted.filter(l => getStatus(l).cls === 'due').length;
 
   if (!flashActive) {
     subtitle.textContent = `${lawns.length} lawns · ${dueCount} need mowing now · ${todayStr()}`;
@@ -323,11 +380,8 @@ function render() {
   }
 
   let filtered = sorted;
-  if (currentFilter === 'due') {
-    filtered = sorted.filter(l => getStatus(l).cls === 'due');
-  } else if (currentFilter === 'soon') {
-    filtered = sorted.filter(l => getStatus(l).cls === 'soon');
-  }
+  if (currentFilter === 'due')  filtered = sorted.filter(l => getStatus(l).cls === 'due');
+  if (currentFilter === 'soon') filtered = sorted.filter(l => getStatus(l).cls === 'soon');
 
   if (filtered.length === 0) {
     list.innerHTML = '<div class="empty">Nothing here. All caught up.</div>';
@@ -340,6 +394,26 @@ function render() {
     const card = document.createElement('div');
     card.className = `card ${status.cls === 'due' ? 'due' : status.cls === 'soon' ? 'soon' : ''}`;
 
+    const histCount = lawn.mowHistory.length;
+    const showHist  = historyOpen.has(lawn.id);
+
+    // Build history rows (newest first)
+    let historyHTML = '';
+    if (showHist) {
+      const rows = [...lawn.mowHistory].reverse().map((d, i) => {
+        const ago = daysBetween(d);
+        const agoStr = ago === 0 ? 'today' : ago === 1 ? 'yesterday' : `${ago} days ago`;
+        return `<div class="history-entry">
+          <span class="h-date">${formatDateFull(d)}</span>
+          <span class="h-ago">${agoStr}</span>
+        </div>`;
+      }).join('');
+      historyHTML = `<div class="history-section">
+        <div style="font-size:0.75rem; color:var(--text-dim); letter-spacing:0.05em; text-transform:uppercase;">Mow History</div>
+        <div class="history-list">${rows}</div>
+      </div>`;
+    }
+
     card.innerHTML = `
       <div class="card-top">
         <div class="name">${lawn.name}${lawn.address ? ' — ' + lawn.address : ''}</div>
@@ -349,86 +423,87 @@ function render() {
       <div class="status ${status.cls}">${status.label}</div>
       <div class="controls">
         <button data-action="mow" data-id="${lawn.id}">Mowed today</button>
+        <button class="btn-history secondary" data-action="history" data-id="${lawn.id}">
+          ${showHist ? 'Hide history' : 'History'}<span class="history-badge">${histCount}</span>
+        </button>
         <button class="secondary" data-action="delete" data-id="${lawn.id}" data-name="${lawn.name}">Remove</button>
       </div>
+      ${historyHTML}
     `;
     list.appendChild(card);
   });
 
+  // Wire up buttons
   list.querySelectorAll('button[data-action="mow"]').forEach(btn => {
     btn.addEventListener('click', () => markMowed(btn.dataset.id));
   });
+  list.querySelectorAll('button[data-action="history"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      if (historyOpen.has(id)) historyOpen.delete(id);
+      else historyOpen.add(id);
+      render();
+    });
+  });
   list.querySelectorAll('button[data-action="delete"]').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (confirm(`Remove ${btn.dataset.name} from the list?`)) {
-        deleteLawn(btn.dataset.id);
-      }
+      if (confirm(`Remove ${btn.dataset.name} from the list?`)) deleteLawn(btn.dataset.id);
     });
   });
   list.querySelectorAll('.cycle-input').forEach(input => {
-    input.addEventListener('blur', () => {
-      updateCycle(input.dataset.id, input.value).then(render);
-    });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        input.blur();
-      }
-    });
+    input.addEventListener('blur', () => { updateCycle(input.dataset.id, input.value); render(); });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
   });
 }
 
-document.getElementById('filter-all').addEventListener('click', (e) => {
+// Filter buttons
+document.getElementById('filter-all').addEventListener('click', e => {
   currentFilter = 'all';
   document.querySelectorAll('.filter-bar button').forEach(b => b.classList.remove('active'));
   e.target.classList.add('active');
   render();
 });
-document.getElementById('filter-due').addEventListener('click', (e) => {
+document.getElementById('filter-due').addEventListener('click', e => {
   currentFilter = 'due';
   document.querySelectorAll('.filter-bar button').forEach(b => b.classList.remove('active'));
   e.target.classList.add('active');
   render();
 });
-document.getElementById('filter-soon').addEventListener('click', (e) => {
+document.getElementById('filter-soon').addEventListener('click', e => {
   currentFilter = 'soon';
   document.querySelectorAll('.filter-bar button').forEach(b => b.classList.remove('active'));
   e.target.classList.add('active');
   render();
 });
 
+// Add lawn form
 document.getElementById('add-lawn-btn').addEventListener('click', () => {
   const form = document.getElementById('add-form');
   form.style.display = form.style.display === 'none' ? 'block' : 'none';
   document.getElementById('new-lastmow').value = todayStr();
 });
-
 document.getElementById('cancel-new-lawn').addEventListener('click', () => {
   document.getElementById('add-form').style.display = 'none';
   document.getElementById('new-name').value = '';
   document.getElementById('new-price').value = '';
   document.getElementById('new-cycle').value = '8';
 });
-
-document.getElementById('save-new-lawn').addEventListener('click', async () => {
-  const name = document.getElementById('new-name').value.trim();
-  const price = parseFloat(document.getElementById('new-price').value) || 0;
-  const cycle = parseInt(document.getElementById('new-cycle').value, 10) || DEFAULT_CYCLE;
+document.getElementById('save-new-lawn').addEventListener('click', () => {
+  const name    = document.getElementById('new-name').value.trim();
+  const price   = parseFloat(document.getElementById('new-price').value) || 0;
+  const cycle   = parseInt(document.getElementById('new-cycle').value, 10) || DEFAULT_CYCLE;
   const lastMow = document.getElementById('new-lastmow').value || todayStr();
 
-  if (!name) {
-    alert('Please enter a name or address.');
-    return;
-  }
+  if (!name) { alert('Please enter a name or address.'); return; }
 
   const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now();
-  lawns.push({ id, name, address: '', price, lastMow, cycle });
-  await saveLawns();
+  lawns.push(migrateLawn({ id, name, address: '', price, lastMow, cycle }));
+  saveLawns();
 
   document.getElementById('add-form').style.display = 'none';
   document.getElementById('new-name').value = '';
   document.getElementById('new-price').value = '';
   document.getElementById('new-cycle').value = '8';
-
   render();
 });
 
